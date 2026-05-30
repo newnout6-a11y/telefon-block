@@ -1,0 +1,39 @@
+# Development / training dependencies for the App Category ML Classifier
+# pipeline (spec: .kiro/specs/app-category-ml-classifier/, task 1.1).
+#
+# Versions are pinned for reproducibility. Bumping a pin is a deliberate
+# action: re-run the full Training_Pipeline (Requirement 2) and confirm
+# byte-identical artifacts under fixed --seed before merging.
+#
+# Install with:
+#     python -m pip install -r requirements-dev.txt
+
+# TensorFlow — Training_Pipeline backbone (Requirement 2.2, 2.3, 2.6).
+# 2.16.x is the last line that ships TFLite converter bundled in the
+# main wheel (`tf.lite.TFLiteConverter`), which the Training_Pipeline
+# depends on for dynamic-range quantization (Requirement 2.6, 2.7).
+tensorflow==2.16.2
+
+# scikit-learn — stratified 80/10/10 splits (Requirement 1.7) and the
+# precision/recall/F1 metrics computed in evaluate() (Requirement 2.4).
+scikit-learn==1.5.2
+
+# Hypothesis — property-based testing harness for the Python side
+# (tasks 2.2, 2.4, 2.6, 4.2, 7.4, 7.7, 7.11 in tasks.md).
+hypothesis==6.115.5
+
+# pytest — test runner. The training/dataset test suites
+# (`tests/test_build_app_category_dataset.py`,
+# `tests/test_build_app_category_splits.py`,
+# `tests/test_train_app_category_classifier.py`) are pytest-discovered.
+pytest==8.3.4
+
+# google-play-scraper — preferred enrichment client for the Google Play
+# Store crawler (`scripts/crawlers/play_store_crawler.py`, task 5.1 in
+# `app-category-ml-classifier/tasks.md`). Used to fetch authoritative
+# display names for each packageName discovered via the category-page
+# HTML listing. The library is *optional*: the crawler falls back to
+# pure stdlib HTML scraping when the import fails, so that CI runners
+# without network access to PyPI can still execute the dataset
+# pipeline tests.
+google-play-scraper==1.2.7

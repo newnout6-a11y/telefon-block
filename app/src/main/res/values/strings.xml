@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Блокировщик спама</string>
+
+    <!-- Home -->
+    <string name="protection_enabled">Защита включена</string>
+    <string name="protection_disabled">Защита выключена</string>
+    <string name="blocked_today">Заблокировано сегодня</string>
+    <string name="warned_today">Предупреждений сегодня</string>
+    <string name="blocked_week">За неделю</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Главная</string>
+    <string name="nav_log">Журнал</string>
+    <string name="nav_blacklist">Чёрный список</string>
+    <string name="nav_rules">Правила</string>
+    <string name="nav_settings">Настройки</string>
+
+    <!-- Call log -->
+    <string name="call_log_title">Журнал звонков</string>
+    <string name="verdict_block">Заблокирован</string>
+    <string name="verdict_warn">Предупреждение</string>
+    <string name="verdict_allow">Разрешён</string>
+    <string name="unknown_number">Неизвестный номер</string>
+    <string name="add_to_blacklist">В чёрный список</string>
+    <string name="add_to_whitelist">В белый список</string>
+
+    <!-- Blacklist -->
+    <string name="blacklist_title">Чёрный список</string>
+    <string name="whitelist_title">Белый список</string>
+    <string name="add_number_hint">Введите номер…</string>
+    <string name="add">Добавить</string>
+    <string name="delete">Удалить</string>
+    <string name="empty_list">Список пуст</string>
+
+    <!-- Rules -->
+    <string name="rules_title">Правила фильтрации</string>
+    <string name="rule_whitelist">Белый список</string>
+    <string name="rule_whitelist_desc">Номера из белого списка всегда разрешены</string>
+    <string name="rule_contacts">Контакты</string>
+    <string name="rule_contacts_desc">Номера из контактов всегда разрешены</string>
+    <string name="rule_blacklist">Чёрный список</string>
+    <string name="rule_blacklist_desc">Номера из чёрного списка блокируются</string>
+    <string name="rule_prebuilt">База спам-номеров</string>
+    <string name="rule_prebuilt_desc">Предзагруженная база известных спам-номеров</string>
+    <string name="rule_hidden">Скрытые номера</string>
+    <string name="rule_hidden_desc">Номера без определителя</string>
+    <string name="rule_prefix">Подозрительные префиксы</string>
+    <string name="rule_prefix_desc">Номера, начинающиеся с определённых кодов</string>
+    <string name="rule_length">Нестандартная длина</string>
+    <string name="rule_length_desc">Слишком короткие или длинные номера</string>
+    <string name="action_block">Блокировать</string>
+    <string name="action_warn">Предупреждать</string>
+    <string name="action_allow">Разрешать</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Настройки</string>
+    <string name="db_update">Обновление базы</string>
+    <string name="db_update_desc">Загружать обновления базы спам-номеров</string>
+    <string name="db_update_url">URL обновления</string>
+    <string name="about">О приложении</string>
+    <string name="version">Версия %1$s</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_title">Добро пожаловать!</string>
+    <string name="onboarding_desc">Для работы блокировки нужны разрешения и назначение приложения фильтром звонков</string>
+    <string name="step_contacts">Доступ к контактам</string>
+    <string name="step_contacts_desc">Чтобы разрешать звонки от ваших контактов</string>
+    <string name="step_call_log">Доступ к журналу</string>
+    <string name="step_call_log_desc">Для отображения заблокированных звонков</string>
+    <string name="step_notifications">Уведомления</string>
+    <string name="step_notifications_desc">Для предупреждений о подозрительных звонках</string>
+    <string name="step_role">Фильтр звонков</string>
+    <string name="step_role_desc">Назначить приложение для фильтрации входящих звонков</string>
+    <string name="grant">Разрешить</string>
+    <string name="done">Готово</string>
+    <string name="next">Далее</string>
+    <string name="skip">Пропустить</string>
+</resources>

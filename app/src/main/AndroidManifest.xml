@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- UsageStats: special access. Без декларации Android вообще не показывает
+         приложение в списке Settings → Special access → Usage access, поэтому
+         пользователь не может его включить. tools:ignore="ProtectedPermissions" —
+         это `signature|appop` permission, его нельзя получить автоматически:
+         юзер должен включить тумблер вручную в системных настройках. Lint
+         иначе ругается на «protected». -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+    <!-- Разрешает показывать heads-up уведомление поверх incoming call UI (Android 14+) -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- Чтобы heads-up уведомление с FullScreenIntent корректно появлялось на API 29+ -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Разрешает рисовать плашку поверх incoming call UI. Единственный надёжный способ
+         показать предупреждение во время звонка. Требует явного включения юзером. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- AnswerBot: запись голоса звонящего через VOICE_COMMUNICATION -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- AnswerBot: принять звонок программно (dangerous) -->
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
+    <!-- AnswerBot foreground service types (API 34+) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+
+    <application
+        android:name=".SpamBlockerApp"
+        android:allowBackup="true"
+        android:icon="@drawable/ic_shield"
+        android:roundIcon="@drawable/ic_shield"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.SpamBlocker"
+        tools:targetApi="34">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.SpamBlocker">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".service.SpamCallScreeningService"
+            android:exported="true"
+            android:permission="android.permission.BIND_SCREENING_SERVICE">
+            <intent-filter>
+                <action android:name="android.telecom.CallScreeningService" />
+            </intent-filter>
+        </service>
+
+        <receiver
+            android:name=".notification.SpamActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.antispam.blocker.ACTION_BLOCK" />
+                <action android:name="com.antispam.blocker.ACTION_ALLOW" />
+                <action android:name="com.antispam.blocker.PERSONAL_SPAM_YES" />
+                <action android:name="com.antispam.blocker.PERSONAL_SPAM_NO" />
+            </intent-filter>
+        </receiver>
+
+        <service
+            android:name=".overlay.SpamAlertOverlayService"
+            android:exported="false" />
+
+        <service
+            android:name=".service.PersonalNotificationListenerService"
+            android:exported="true"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!-- AnswerBot: невидимый автоответчик с записью и расшифровкой -->
+        <service
+            android:name=".service.SpamAnswerBotService"
+            android:exported="false"
+            android:foregroundServiceType="microphone|phoneCall" />
+
+    </application>
+
+</manifest>

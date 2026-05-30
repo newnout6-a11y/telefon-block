@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Factory.ai-inspired palette (mirrors Color.kt) -->
+    <color name="ink">#0A0A0B</color>
+    <color name="ink_elevated">#111113</color>
+    <color name="ink_surface">#161619</color>
+    <color name="ink_border">#23232A</color>
+    <color name="amber">#FF6B1A</color>
+    <color name="amber_soft">#FFB070</color>
+    <color name="text_primary">#F5F5F7</color>
+    <color name="text_secondary">#A0A0AB</color>
+
+    <!-- Legacy aliases for theme references -->
+    <color name="md_theme_light_primary">#FF6B1A</color>
+    <color name="md_theme_dark_primary">#FF6B1A</color>
+
+    <color name="block_red">#FF4D6D</color>
+    <color name="warn_amber">#FFB84D</color>
+    <color name="allow_green">#4ADE80</color>
+</resources>

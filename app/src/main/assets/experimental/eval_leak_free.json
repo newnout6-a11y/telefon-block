@@ -1,0 +1,32 @@
+{
+  "timestamp": "2026-05-16T12:55:13.557174+00:00",
+  "model": "app\\src\\main\\assets\\experimental\\spam_model_leak_free.tflite",
+  "card": "app\\src\\main\\assets\\experimental\\model_card_leak_free.json",
+  "golden_set": "datasets\\ru\\eval\\cold_eval_5k_labeled.csv",
+  "cold_mode": true,
+  "output_format": "3class_softmax",
+  "eval_rows": 5000,
+  "metrics": {
+    "block_precision": 0.9678063389069129,
+    "block_recall": 0.8587245349867139,
+    "block_f1": 0.910008213070515,
+    "allow_fp_rate": 0.371900826446281,
+    "accuracy": 0.8048,
+    "tp_block": 3878,
+    "fp_block": 129,
+    "fn_block": 638,
+    "tn_block": 355,
+    "total": 5000,
+    "true_spam_count": 4516,
+    "true_allow_count": 484
+  },
+  "gates": {
+    "min_block_precision": 0.85,
+    "min_block_recall": 0.55,
+    "max_allow_fp_rate": 0.2
+  },
+  "failures": [
+    "ALLOW FP rate 0.3719 > max 0.20"
+  ],
+  "status": "FAIL"
+}

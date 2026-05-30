@@ -1,0 +1,50 @@
+﻿# IDE / OS
+*.iml
+.idea/
+.DS_Store
+Thumbs.db
+
+# Android / Gradle
+.gradle/
+build/
+app/build/
+app/schemas/
+local.properties
+.externalNativeBuild
+.cxx
+/captures
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+.venv/
+venv/
+
+# Kotlin
+.kotlin/
+
+# VS Code
+.vscode/
+
+# Datasets & training artifacts (NOT in this code-only repo)
+datasets/
+catboost_info/
+releases/latest/
+batch_*.tar.gz
+
+# Large app assets (rebuild via scripts/, see RESTORE_DATA_AND_LOOKUP.md)
+app/src/main/assets/prebuilt_blocklist.db
+app/src/main/assets/prebuilt_blocklist.db.gz
+app/src/main/assets/spam_numbers.csv
+app/src/main/assets/prefix_histogram_7.json
+app/src/main/assets/phone_lookup.bin
+app/src/main/assets/answerbot/vosk-model-small-ru-0.22/
+app/src/main/assets/answerbot/greeting.ogg
+
+# Disposable helper scripts
+scripts/_*.ps1
+scripts/_*.py

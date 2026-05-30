@@ -1,0 +1,199 @@
+name: crawl-keepalive
+
+# Бессмертный краулер по паттерну Faceit: один job сидит в долгом for-цикле
+# (5.5 часа = 66 итераций по ~5 минут), а cron каждые 5ч запускает новую
+# волну. Между волнами нет gap'а: новая стартует когда старая ещё жива,
+# обеспечивая непрерывное покрытие даже при задержках cron на free-tier.
+#
+# Matrix 3 shard'а => 3 параллельных runner'а => 3 разных IP от Azure-пула
+# GitHub. На пересечении волн (~1 час каждые 5ч) — до 6 IP одновременно.
+
+on:
+  schedule:
+    - cron: '0 */5 * * *'
+  workflow_dispatch: {}
+  push:
+    # Restrict to the default branch so feature-branch pushes that touch the
+    # listed paths don't accidentally fire the keep-alive loop on the PR
+    # branch (where it would commit scraped data back to that branch).
+    branches:
+      - devin/1777391301-kd-distillation
+      - main
+    paths:
+      - '.github/workflows/crawl-keepalive.yml'
+      - 'scripts/ru_reputation_crawler.py'
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write  # for `gh workflow run consolidate-assets.yml`
+    timeout-minutes: 350  # 5h50m, чтобы система успела finally-блок
+    # Не отменяем уже бегущие волны — пусть докрутят свой 5.5h-цикл.
+    # Шарды независимы, каждый коммитит только свой файл, конфликтов нет.
+    concurrency:
+      group: crawl-keepalive-${{ matrix.shard }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: a
+            sources: 'spravportal,callfilter,zvonili,moshelovka'
+            drive_dir: 'сайты_a_callfilter_zvonili'
+          - shard: b
+            sources: 'bloha,getscam,znum,prozvonok'
+            drive_dir: 'сайты_b_znum_prozvonok'
+          - shard: c
+            sources: 'netrubi,zvonkoff,ktozvonil,znomer'
+            drive_dir: 'сайты_c_zvonkoff_ktozvonil'
+          - shard: d
+            # New shard for the BLOCK speedup (PR #3): isolates phoneregion
+            # (added in PR #2) so it gets a dedicated 130-iter loop instead
+            # of sharing iter quota with the other 4 sources on shard 'a'.
+            sources: 'phoneregion'
+            drive_dir: 'сайты_d_phoneregion'
+          - shard: e
+            # Phase 2 (PR following #12): isolates the two new reputation
+            # aggregators added by Variant C scout.
+            #   * callfilter.info — distinct from callfilter.app, ~50k
+            #     /number/<11d> URLs in a flat sitemap, status-label +
+            #     comments per detail page.
+            #   * scamcall.ru — Vue/Nuxt SPA whose static HTML still
+            #     exposes a 25-30-card swiper of phone+verdict pairs per
+            #     detail page (mostly мошенники), plus a main commentary
+            #     block; sitemap-index points to gzip sub-sitemaps.
+            sources: 'callfilter_info,scamcall'
+            drive_dir: 'сайты_e_callfilter_info_scamcall'
+          - shard: f
+            # Phase 2.5: three more reputation aggregators (all static HTML
+            # — no Playwright required) discovered by the second-wave
+            # scout (web search + sitemap probing):
+            #   * kto.zvonil.tel — Bootstrap detail pages with blockquote
+            #     reviews; root + detail pages expose ~10-30 /+<phone>
+            #     fan-out URLs each ("Новые отзывы" / "Случайные отзывы").
+            #   * abonentik.ru   — Vue/Nuxt SSR pages whose verdict is
+            #     encoded in /category/<slug> links (rich vocabulary:
+            #     фишинг / вымогательство / коллекторы / спам / реклама /
+            #     телемаркетинг / угрозы / …). /sitemap_1.xml lists ~32k
+            #     phone URLs.
+            #   * badcall.ru     — Bootstrap detail pages where the
+            #     verdict is encoded in the colour class on each <li>:
+            #     list-group-item-{danger,warning,success}. No public
+            #     sitemap; discovery is via root-page hrefs and the
+            #     "Соседние номера" footer.
+            sources: 'kto_zvonil_tel,abonentik,badcall'
+            drive_dir: 'сайты_f_phase25_aggregators'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install crawler deps
+        run: pip install --quiet requests beautifulsoup4 lxml
+
+      - name: Setup rclone (Google Drive sync)
+        env:
+          RCLONE_CONFIG: ${{ secrets.RCLONE_CONFIG }}
+        run: |
+          set +e
+          source scripts/drive_sync.sh
+          drive_setup
+
+      - name: Restore shard state from Drive
+        env:
+          SHARD: ${{ matrix.shard }}
+          DRIVE_DIR: ${{ matrix.drive_dir }}
+          RCLONE_CONFIG: ${{ secrets.RCLONE_CONFIG }}
+        run: |
+          set +e
+          source scripts/drive_sync.sh
+          drive_pull_latest_archive "datasets/ru/raw/shards/${SHARD}" \
+            "данные_парсера/спам_номера_сырые/${DRIVE_DIR}" \
+            "партии/спам/шард_${SHARD}" \
+            "batches/block/${SHARD}" \
+            "shards/${SHARD}"
+          ls -la "datasets/ru/raw/shards/${SHARD}" 2>/dev/null || true
+
+      - name: Long-running crawl loop (shard ${{ matrix.shard }})
+        env:
+          SHARD: ${{ matrix.shard }}
+          SOURCES: ${{ matrix.sources }}
+          DRIVE_DIR: ${{ matrix.drive_dir }}
+          RCLONE_CONFIG: ${{ secrets.RCLONE_CONFIG }}
+          # GH_TOKEN exposed for `gh workflow run` calls so we can poke the
+          # consolidate-assets workflow after every batch. Cross-workflow
+          # dispatch — no git commits or pushes from this workflow anymore;
+          # all collected data goes directly to Google Drive via rclone.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          mkdir -p "datasets/ru/raw/shards/${SHARD}"
+          source scripts/drive_sync.sh
+          shard_dir="datasets/ru/raw/shards/${SHARD}"
+
+          # Большая часть итераций должна уложиться в 5h45m, оставляя
+          # запас для финального коммита; ~5 мин на итерацию.
+          # PR #3 speedup: 66 iter @ 5min  →  130 iter @ 2.5min (sleep 60→20),
+          # max-urls 200→400, workers 4→6.  Keeps 5.5h cycle wall-clock unchanged.
+          #
+          # Upload to Drive on a randomized ~hourly timer (50-70 min jitter)
+          # rather than every N iters. Each push is one tar.gz archive named
+          # batch_<UTC_TS>.tar.gz, so Drive sees a single file per batch
+          # rather than 3 separate raw.csv/evidence.csv/state.json events.
+          # Worst-case loss on runner reaping mid-batch: ~70 min of scraping.
+          MAX_ITERS=130
+          last_push_ts=$(date +%s)
+          next_push_after=$(( 50 * 60 + RANDOM % (20 * 60 + 1) ))
+          for i in $(seq 1 ${MAX_ITERS}); do
+            echo "::group::shard=${SHARD} iter=${i} at $(date -u +%FT%TZ)"
+            python3 scripts/ru_discover_spam.py \
+              --sources "${SOURCES}" \
+              --max-urls 400 \
+              --workers 6 \
+              --delay-min 0.8 \
+              --delay-max 2.5 \
+              --output  "datasets/ru/raw/shards/${SHARD}/raw.csv" \
+              --evidence "datasets/ru/raw/shards/${SHARD}/evidence.csv" \
+              --state    "datasets/ru/raw/shards/${SHARD}/state.json" \
+              --cache-dir "/tmp/crawler_cache_${SHARD}" \
+              || echo "crawler exited non-zero, continuing"
+            echo "::endgroup::"
+
+            # Push to Drive only when ~1h has elapsed since last push, or on
+            # the final iter. Otherwise just sleep and continue accumulating.
+            now_ts=$(date +%s)
+            elapsed=$(( now_ts - last_push_ts ))
+            if (( elapsed < next_push_after )) && (( i != MAX_ITERS )); then
+              sleep 20
+              continue
+            fi
+            echo "::group::drive-push-archive shard=${SHARD} after iter=${i} (elapsed=${elapsed}s, threshold=${next_push_after}s)"
+
+            uploaded=0
+            if drive_push_archive "${shard_dir}" "данные_парсера/спам_номера_сырые/${DRIVE_DIR}"; then
+              uploaded=1
+              last_push_ts=$(date +%s)
+              next_push_after=$(( 50 * 60 + RANDOM % (20 * 60 + 1) ))
+            fi
+
+            # Trigger consolidate-assets via workflow_dispatch so master CSVs
+            # get rebuilt from the freshly-uploaded shard data on Drive.
+            # Only fire from shard 'a' to avoid 4x duplicate dispatches.
+            if [ "${SHARD}" = "a" ] && [ "${uploaded}" = "1" ]; then
+              gh workflow run consolidate-assets.yml \
+                --ref "${GITHUB_REF_NAME}" 2>&1 | tail -3 || \
+                echo "workflow_dispatch failed (non-fatal)"
+            fi
+            echo "::endgroup::"
+
+            sleep 20
+          done
+
+          echo "shard ${SHARD} loop finished at $(date -u +%FT%TZ)"

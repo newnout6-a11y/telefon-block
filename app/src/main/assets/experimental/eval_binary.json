@@ -1,0 +1,30 @@
+{
+  "timestamp": "2026-05-16T13:07:32.678915+00:00",
+  "model": "app\\src\\main\\assets\\experimental\\spam_model_binary.tflite",
+  "card": "app\\src\\main\\assets\\experimental\\model_card_binary.json",
+  "golden_set": "datasets\\ru\\eval\\cold_eval_5k_labeled.csv",
+  "cold_mode": true,
+  "output_format": "3class_softmax",
+  "eval_rows": 5000,
+  "metrics": {
+    "block_precision": 0.983224603914259,
+    "block_recall": 0.7008414526129318,
+    "block_f1": 0.8183581124757595,
+    "allow_fp_rate": 0.1115702479338843,
+    "accuracy": 0.6616,
+    "tp_block": 3165,
+    "fp_block": 54,
+    "fn_block": 1351,
+    "tn_block": 430,
+    "total": 5000,
+    "true_spam_count": 4516,
+    "true_allow_count": 484
+  },
+  "gates": {
+    "min_block_precision": 0.85,
+    "min_block_recall": 0.55,
+    "max_allow_fp_rate": 0.2
+  },
+  "failures": [],
+  "status": "PASS"
+}

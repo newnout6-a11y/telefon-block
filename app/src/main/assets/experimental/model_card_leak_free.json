@@ -1,0 +1,113 @@
+{
+  "version": "plain-mlp-leakfree-20260516-154606",
+  "created_at": "2026-05-16T12:46:06.092074+00:00",
+  "feature_count": 52,
+  "features": [
+    "isContact",
+    "isRussianNumber",
+    "isForeignNumber",
+    "isShortCode",
+    "isStandardLen",
+    "isTollFree8800",
+    "isGeographical",
+    "isMobileRu",
+    "isValidRuRange",
+    "spoofingPrefixFlag",
+    "digitEntropy",
+    "repeatDigitRatio",
+    "maxSameDigitRun",
+    "beautifulNumberFlag",
+    "prefixRisk",
+    "callFrequency",
+    "isNightTime",
+    "recentBankApp",
+    "recentGovApp",
+    "recentMarketplaceApp",
+    "recentMessengerApp",
+    "previouslyRejected",
+    "inBlacklist",
+    "inAllowlist",
+    "hiddenNumber",
+    "callerVerifyFailed",
+    "userVulnerability",
+    "userBusinessActivity",
+    "contactsAvailable",
+    "usageAccessAvailable",
+    "reputationScore",
+    "sourceConfidence",
+    "operatorMts",
+    "operatorMegafon",
+    "operatorBeeline",
+    "operatorTele2",
+    "operatorMvno",
+    "defCodeRisk",
+    "prefixBlockShare",
+    "prefixWarnShare",
+    "prefixSeenLog",
+    "reviewsLog",
+    "negativeRatio",
+    "searchVolumeLog",
+    "hasFraudCategory",
+    "hasTelemarketingCategory",
+    "noMetadata",
+    "prefixBlockShare3",
+    "prefixBlockShare7",
+    "prefixEntropy",
+    "defCodeOperatorRisk",
+    "prefixSampleSize"
+  ],
+  "rows": 999999,
+  "class_counts": {
+    "ALLOW": 96819,
+    "WARN": 86509,
+    "BLOCK": 816671
+  },
+  "dataset_hash": "014c46e9d5b84b56",
+  "best_model": "plain_mlp",
+  "best_of": {
+    "selected": "plain_mlp",
+    "val_unknown_macroF1": {
+      "plain_mlp": 0.6053,
+      "kd_student": 0.5573
+    }
+  },
+  "block_precision": 0.903,
+  "block_recall": 0.0,
+  "roc_auc_ovr": null,
+  "thresholds": {
+    "block_threshold": 0.19,
+    "warn_threshold": 0.28,
+    "block_precision": 0.903,
+    "block_recall": 0.0,
+    "block_f1": 0.893,
+    "warn_f1": 0.0
+  },
+  "smote_applied": false,
+  "kd": {
+    "T": 8.0,
+    "alpha": 0.7,
+    "teacher": "catboost_multiclass",
+    "teacher_train_per_class": {
+      "ALLOW": 77455,
+      "WARN": 69207,
+      "BLOCK": 653337
+    },
+    "student_train_per_class": {
+      "ALLOW": 77455,
+      "WARN": 69207,
+      "BLOCK": 653337
+    }
+  },
+  "cold_start": {
+    "eval_size": 100000,
+    "tflite_metrics": {},
+    "tflite_metrics_cold_thresholded": {}
+  },
+  "class_weights": {
+    "allow": 10.0,
+    "warn": 12.0,
+    "block": 1.0
+  },
+  "notes": "Manually reconstructed after TF 2.21 sanity-check crash. Metrics taken from trainer log; .tflite is the actual exported plain MLP. Trained on 1M-row stratified subsample of cold-eval-style ru_tflite_features.csv.",
+  "leak_free": true
+}

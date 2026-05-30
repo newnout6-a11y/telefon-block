@@ -1,0 +1,155 @@
+name: crawl-allow-osm-wikidata
+
+# Daily ALLOW-side bulk collectors:
+#   * scripts/ru_osm_bulk_collector.py — Geofabrik russia-latest.osm.pbf
+#     full-extract scan via pyosmium. Replaces the Overpass-API-bound osm
+#     shard with a single-pass scan of the entire Russia OSM extract; no
+#     rate limit, no per-category timeouts, yields every phone-tagged
+#     element instead of capping at ~80k. Expected output: 200-400k unique
+#     RU phones per run.
+#   * scripts/ru_osm_collector.py     — OSM Overpass API (legacy, kept as a
+#     redundancy layer; the bulk shard supersedes this one in practice).
+#   * scripts/ru_wikidata_collector.py — Wikidata SPARQL split across 15+
+#     category-specific queries (medical, education, gov, banks, hotels,
+#     museums, libraries, …). Single-query mode timed out and yielded only
+#     ~450 entries against a 50k budget; per-category queries fit in the
+#     60-sec slot and pull 5-15k entries each.
+#
+# Why a separate workflow (not in crawl-allow-keepalive):
+#   * Both call API endpoints with strict rate limits (Overpass: ~2 req/s
+#     concurrent, Wikidata SPARQL: 60s slot). Looping them every 5 min in a
+#     keepalive doesn't help — the upstream limit is what gates throughput.
+#     Once a day is enough; the data source itself updates on weekly cadence.
+#   * Output ships to its own Drive folder (per-shard layout) so
+#     consolidate-assets.yml's merge_legitimate_shards.py picks it up like
+#     any other shard.
+
+on:
+  schedule:
+    - cron: '30 2 * * *'  # 02:30 UTC daily ≈ 05:30 MSK
+  workflow_dispatch: {}
+  push:
+    branches:
+      - devin/1777391301-kd-distillation
+      - main
+    paths:
+      - '.github/workflows/crawl-allow-osm-wikidata.yml'
+      - 'scripts/ru_osm_bulk_collector.py'
+      - 'scripts/ru_osm_collector.py'
+      - 'scripts/ru_wikidata_collector.py'
+
+concurrency:
+  group: crawl-allow-osm-wikidata-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write  # for `gh workflow run consolidate-assets.yml`
+    timeout-minutes: 90  # osm-bulk job downloads + parses ~3.5 GB pbf (15-25 min)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: osm-bulk
+            script: 'ru_osm_bulk_collector.py'
+            extra_args: '--pbf-cache /tmp/russia-latest.osm.pbf'
+            drive_dir: 'легальные_osm_bulk'
+            extra_pip: 'osmium'
+          - shard: osm
+            script: 'ru_osm_collector.py'
+            extra_args: '--max-per-category 80000'
+            drive_dir: 'легальные_osm'
+            extra_pip: ''
+          - shard: wikidata
+            script: 'ru_wikidata_collector.py'
+            extra_args: '--max-results 50000'
+            drive_dir: 'легальные_wikidata'
+            extra_pip: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install deps
+        run: |
+          pip install --quiet requests
+          if [ -n "${{ matrix.extra_pip }}" ]; then
+            pip install --quiet ${{ matrix.extra_pip }}
+          fi
+
+      - name: Setup rclone (Google Drive sync)
+        env:
+          RCLONE_CONFIG: ${{ secrets.RCLONE_CONFIG }}
+        run: |
+          set +e
+          source scripts/drive_sync.sh
+          drive_setup
+
+      - name: Restore prior shard archive from Drive
+        env:
+          SHARD: ${{ matrix.shard }}
+          DRIVE_DIR: ${{ matrix.drive_dir }}
+          RCLONE_CONFIG: ${{ secrets.RCLONE_CONFIG }}
+        run: |
+          set +e
+          source scripts/drive_sync.sh
+          shard_dir="datasets/ru/raw/legitimate_shards/${SHARD}"
+          mkdir -p "${shard_dir}"
+          drive_pull_latest_archive "${shard_dir}" \
+            "данные_парсера/легальные_номера_сырые/${DRIVE_DIR}" \
+            "партии/легальные/шард_${SHARD}" \
+            "batches/allow/${SHARD}" \
+            "allow_shards/${SHARD}"
+          ls -la "${shard_dir}" 2>/dev/null || true
+
+      - name: Run ${{ matrix.script }}
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set +e
+          shard_dir="datasets/ru/raw/legitimate_shards/${SHARD}"
+          out_csv="${shard_dir}/legitimate.csv"
+          # Both collectors append-with-dedup to the supplied --output, so
+          # passing the shard's own legitimate.csv preserves prior runs and
+          # only adds genuinely new numbers.
+          python3 scripts/${{ matrix.script }} \
+            --output "${out_csv}" \
+            ${{ matrix.extra_args }} \
+            || echo "${{ matrix.script }} exited non-zero (continuing to upload partial)"
+          if [ -f "${out_csv}" ]; then
+            wc -l "${out_csv}"
+          fi
+
+      - name: Push shard archive to Drive
+        env:
+          SHARD: ${{ matrix.shard }}
+          DRIVE_DIR: ${{ matrix.drive_dir }}
+          RCLONE_CONFIG: ${{ secrets.RCLONE_CONFIG }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          source scripts/drive_sync.sh
+          shard_dir="datasets/ru/raw/legitimate_shards/${SHARD}"
+          out_csv="${shard_dir}/legitimate.csv"
+          if [ ! -f "${out_csv}" ]; then
+            echo "no output for shard ${SHARD}, skipping upload"
+            exit 0
+          fi
+          push_dir="/tmp/allow_push_${SHARD}"
+          rm -rf "${push_dir}" && mkdir -p "${push_dir}"
+          cp "${out_csv}" "${push_dir}/legitimate.csv"
+          # NB: post-push `gh workflow run consolidate-assets.yml` removed.
+          # See crawl-allow-keepalive.yml for rationale — daily OSM/Wikidata
+          # data is picked up by the */30 cron in consolidate-assets.yml.
+          if ! drive_push_archive "${push_dir}" \
+            "данные_парсера/легальные_номера_сырые/${DRIVE_DIR}"; then
+            echo "drive_push_archive failed for ${SHARD}"
+          fi

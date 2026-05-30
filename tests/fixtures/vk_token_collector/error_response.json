@@ -1,0 +1,7 @@
+{
+  "error": {
+    "error_code": 15,
+    "error_msg": "Access denied: wall is disabled",
+    "request_params": []
+  }
+}

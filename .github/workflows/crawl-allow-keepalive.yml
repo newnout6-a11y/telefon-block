@@ -1,0 +1,215 @@
+name: crawl-allow-keepalive
+
+# ALLOW-side keep-alive краулер: каждые 5 часов запускает 5.5h долгоживущий
+# job, который циклически вызывает scripts/ru_legitimate_collector.py чтобы
+# наращивать datasets/ru/raw/legitimate_shards/<shard>/legitimate.csv.
+# consolidate-assets.yml потом мержит все шарды в master
+# datasets/ru/raw/legitimate_numbers.csv через scripts/merge_legitimate_shards.py.
+#
+# Шардирование (отдаёт ×5 IP-разнообразия и ×5 runner-минут vs single-job)
+# зеркалит структуру crawl-keepalive (BLOCK-краулера). Каждый шард тащит
+# **разный срез источников** через `--sources` registry в коллекторе:
+#
+#   org-fed     — федеральные/гос/банки/телеком (статичный HTML, anti-bot ноль)
+#   org-civic   — пресса/вузы/страховые/ритейл/маркетплейсы/rusprofile
+#   catalogs    — orgpage / list_org / 2gis (high-yield agg)
+#   geo         — spravker / zoon (51 город × подкатегории)
+#   weak        — cian / fl_ru / hands / freelance / drom / delivery / classified
+#
+# Concurrency и max-urls подобраны под каждый шард: org-* шарды пинают
+# банки/гос статикой и могут спокойно идти на 16 параллельных коннектов;
+# weak-шард упирается в anti-bot, держим 6.
+
+on:
+  schedule:
+    - cron: '15 */5 * * *'
+  workflow_dispatch: {}
+  push:
+    # Restrict to the default branch so feature-branch pushes that touch the
+    # listed paths don't accidentally fire the keep-alive loop on the PR
+    # branch (where it would commit scraped data back to that branch).
+    branches:
+      - devin/1777391301-kd-distillation
+      - main
+    paths:
+      - '.github/workflows/crawl-allow-keepalive.yml'
+      - 'scripts/ru_legitimate_collector.py'
+
+jobs:
+  crawl-allow:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write  # for `gh workflow run consolidate-assets.yml`
+    timeout-minutes: 350  # 5h50m, хвост на финальный коммит
+    # Не отменяем уже бегущие волны — пусть докрутят свой 5.5h-цикл.
+    # Шарды независимы, каждый пишет в свой Drive-каталог, конфликтов нет.
+    concurrency:
+      group: crawl-allow-keepalive-${{ matrix.shard }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: org-fed
+            sources: 'ru_federal_hotlines,ru_banks,ru_telecom,ru_airlines,ru_airports,mosgorzdrav,mos_ru'
+            concurrency: 16
+            max_urls: 1200
+            drive_dir: 'легальные_org_fed'
+          - shard: org-civic
+            sources: 'ru_press,ru_universities,ru_insurance,ru_retail,ru_marketplaces,rusprofile'
+            concurrency: 16
+            max_urls: 1200
+            drive_dir: 'легальные_org_civic'
+          - shard: catalogs
+            sources: 'orgpage,list_org,two_gis_api'
+            concurrency: 12
+            max_urls: 800
+            drive_dir: 'легальные_catalogs'
+          - shard: geo
+            sources: 'spravker,zoon'
+            concurrency: 8
+            max_urls: 600
+            drive_dir: 'легальные_geo'
+          - shard: weak
+            sources: 'cian,fl_ru,hands_ru,freelance_ru,drom,delivery_public,classified_public,service_marketplace'
+            concurrency: 6
+            max_urls: 400
+            drive_dir: 'легальные_weak'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install collector deps
+        run: pip install --quiet aiohttp beautifulsoup4 lxml
+
+      - name: Setup rclone (Google Drive sync)
+        env:
+          RCLONE_CONFIG: ${{ secrets.RCLONE_CONFIG }}
+        run: |
+          set +e
+          source scripts/drive_sync.sh
+          drive_setup
+
+      - name: Restore ALLOW shard state from Drive
+        env:
+          SHARD: ${{ matrix.shard }}
+          DRIVE_DIR: ${{ matrix.drive_dir }}
+          RCLONE_CONFIG: ${{ secrets.RCLONE_CONFIG }}
+        run: |
+          set +e
+          source scripts/drive_sync.sh
+          shard_dir="datasets/ru/raw/legitimate_shards/${SHARD}"
+          mkdir -p "${shard_dir}"
+          # Multi-level fallback: new layout (this PR) → pre-shard layout
+          # (single allow batch) so the first wave after merge still sees
+          # whatever data is on Drive.
+          drive_pull_latest_archive "${shard_dir}" \
+            "данные_парсера/легальные_номера_сырые/${DRIVE_DIR}" \
+            "партии/легальные/шард_${SHARD}" \
+            "batches/allow/${SHARD}" \
+            "allow_shards/${SHARD}"
+          # Compat with old single-batch layout: legitimate_numbers.csv lived
+          # at the top level. If only that exists, alias it to the shard's
+          # legitimate.csv so we don't start from scratch on the first run.
+          if [ -f "${shard_dir}/legitimate_numbers.csv" ] && [ ! -f "${shard_dir}/legitimate.csv" ]; then
+            cp "${shard_dir}/legitimate_numbers.csv" "${shard_dir}/legitimate.csv"
+          fi
+          ls -la "${shard_dir}" 2>/dev/null || true
+
+      - name: Long-running ALLOW collector loop (shard ${{ matrix.shard }})
+        env:
+          SHARD: ${{ matrix.shard }}
+          SOURCES: ${{ matrix.sources }}
+          CONC: ${{ matrix.concurrency }}
+          MAX_URLS: ${{ matrix.max_urls }}
+          DRIVE_DIR: ${{ matrix.drive_dir }}
+          RCLONE_CONFIG: ${{ secrets.RCLONE_CONFIG }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          source scripts/drive_sync.sh
+          shard_dir="datasets/ru/raw/legitimate_shards/${SHARD}"
+          out_csv="${shard_dir}/legitimate.csv"
+          state_json="${shard_dir}/state.json"
+
+          # Каждый шард: 130 итераций по 2.5 минуты ≈ 5h30m runtime
+          # (зеркало BLOCK PR #3 speedup). visited_urls с TTL 6h
+          # (см. VISITED_TTL_S в коллекторе) обеспечивает дедуп URL'ов
+          # внутри волны без полного сброса каждую итерацию.
+          #
+          # Upload to Drive on a randomized ~hourly timer (50-70 min jitter).
+          # Each push is a single batch_<UTC_TS>.tar.gz containing the shard
+          # CSV + state JSON.
+          MAX_ITERS=130
+          last_push_ts=$(date +%s)
+          next_push_after=$(( 50 * 60 + RANDOM % (20 * 60 + 1) ))
+          for i in $(seq 1 ${MAX_ITERS}); do
+            echo "::group::allow-iter=${i} shard=${SHARD} at $(date -u +%FT%TZ)"
+
+            # 2.5 min cap per iter — collector saves CSV + state incrementally
+            # after each source so killing it mid-flight loses nothing.
+            #
+            # `--cities all` (Phase-1 ALLOW ×10) expands to every city
+            # registered in SPRAVKER_CITIES + ZOON_CITIES (~130 cities,
+            # up from the previous 51 hard-coded here). The collector's
+            # per-iter budget (--max-urls) gates total work, so adding
+            # cities only widens coverage; it doesn't blow up runtime.
+            timeout 150 python3 scripts/ru_legitimate_collector.py \
+              --sources "${SOURCES}" \
+              --concurrency "${CONC}" \
+              --max-urls "${MAX_URLS}" \
+              --output "${out_csv}" \
+              --state-path "${state_json}" \
+              --cities all \
+              || echo "collector exited (timeout or error), continuing"
+
+            now_ts=$(date +%s)
+            elapsed=$(( now_ts - last_push_ts ))
+            if (( elapsed < next_push_after )) && (( i != MAX_ITERS )); then
+              echo "::endgroup::"
+              sleep 20
+              continue
+            fi
+            echo "::endgroup::"
+            echo "::group::drive-push-archive shard=${SHARD} after iter=${i} (elapsed=${elapsed}s, threshold=${next_push_after}s)"
+
+            # Stage shard files into a temp dir and ship as one tar.gz.
+            push_dir="/tmp/allow_push_${SHARD}"
+            rm -rf "${push_dir}" && mkdir -p "${push_dir}"
+            [ -f "${out_csv}" ]   && cp "${out_csv}"   "${push_dir}/legitimate.csv"
+            [ -f "${state_json}" ] && cp "${state_json}" "${push_dir}/state.json"
+
+            uploaded=0
+            if drive_push_archive "${push_dir}" \
+              "данные_парсера/легальные_номера_сырые/${DRIVE_DIR}"; then
+              uploaded=1
+              last_push_ts=$(date +%s)
+              next_push_after=$(( 50 * 60 + RANDOM % (20 * 60 + 1) ))
+            fi
+
+            # NB: post-push `gh workflow run consolidate-assets.yml` removed
+            # intentionally. With 5 ALLOW shards × this loop + 5 BLOCK shards
+            # firing the same dispatch at staggered intervals, consolidate
+            # was being cancelled mid-merge by a fresher dispatch every 4-6
+            # min (consolidate takes ~20 min). Falling back to the */30 cron
+            # in consolidate-assets.yml — one merge per 30 min is enough.
+
+            echo "::endgroup::"
+            sleep 20  # politeness gap
+          done
+
+          # Final upload to Drive at end of loop — always ship one last batch.
+          push_dir="/tmp/allow_push_${SHARD}"
+          rm -rf "${push_dir}" && mkdir -p "${push_dir}"
+          [ -f "${out_csv}" ]   && cp "${out_csv}"   "${push_dir}/legitimate.csv"
+          [ -f "${state_json}" ] && cp "${state_json}" "${push_dir}/state.json"
+          drive_push_archive "${push_dir}" \
+            "данные_парсера/легальные_номера_сырые/${DRIVE_DIR}" || \
+            echo "final archive upload failed (non-fatal)"

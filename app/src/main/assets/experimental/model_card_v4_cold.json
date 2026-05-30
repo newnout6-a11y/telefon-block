@@ -1,0 +1,184 @@
+{
+  "version": "feedback-tuned-20260514-104747",
+  "created_at": "2026-05-14T10:47:47.778283",
+  "feature_count": 52,
+  "features": [
+    "isContact",
+    "isRussianNumber",
+    "isForeignNumber",
+    "isShortCode",
+    "isStandardLen",
+    "isTollFree8800",
+    "isGeographical",
+    "isMobileRu",
+    "isValidRuRange",
+    "spoofingPrefixFlag",
+    "digitEntropy",
+    "repeatDigitRatio",
+    "maxSameDigitRun",
+    "beautifulNumberFlag",
+    "prefixRisk",
+    "callFrequency",
+    "isNightTime",
+    "recentBankApp",
+    "recentGovApp",
+    "recentMarketplaceApp",
+    "recentMessengerApp",
+    "previouslyRejected",
+    "inBlacklist",
+    "inAllowlist",
+    "hiddenNumber",
+    "callerVerifyFailed",
+    "userVulnerability",
+    "userBusinessActivity",
+    "contactsAvailable",
+    "usageAccessAvailable",
+    "reputationScore",
+    "sourceConfidence",
+    "operatorMts",
+    "operatorMegafon",
+    "operatorBeeline",
+    "operatorTele2",
+    "operatorMvno",
+    "defCodeRisk",
+    "prefixBlockShare",
+    "prefixWarnShare",
+    "prefixSeenLog",
+    "reviewsLog",
+    "negativeRatio",
+    "searchVolumeLog",
+    "hasFraudCategory",
+    "hasTelemarketingCategory",
+    "noMetadata",
+    "prefixBlockShare3",
+    "prefixBlockShare7",
+    "prefixEntropy",
+    "defCodeOperatorRisk",
+    "prefixSampleSize"
+  ],
+  "rows": 84809,
+  "class_counts": {
+    "ALLOW": 40247,
+    "WARN": 2307,
+    "BLOCK": 42255
+  },
+  "dataset_hash": "2b792415bc2530f6e6f85e6d62a61b0bfbd80adc7cc432ea70fe3742e59b0f6c",
+  "best_model": "feedback_cold_mlp",
+  "best_of": {
+    "winner": "feedback_cold_mlp",
+    "selection_basis": "cold test + user verified safe false-positive correction",
+    "notes": "Trained on full cold-view corpus with weighted user_verified_safe feedback examples plus control BLOCK feedback; no whitelist/rule override."
+  },
+  "block_precision": 0.9906740965764019,
+  "block_recall": 0.9999097089241442,
+  "roc_auc_ovr": 0.9987991813298303,
+  "thresholds": {
+    "block_threshold": 0.1,
+    "warn_threshold": 0.12000000000000001,
+    "block_precision": 0.9907548238943068,
+    "block_recall": 0.9998532770017343,
+    "block_f1": 0.9952832573424085,
+    "warn_f1": 0.9530428886251906
+  },
+  "smote_applied": false,
+  "kd": {
+    "T": 4.0,
+    "alpha": 0.5,
+    "teacher": "catboost",
+    "teacher_train_per_class": 100000,
+    "student_train_per_class": 100000
+  },
+  "cold_start": {
+    "eval_size": 328212,
+    "tflite_metrics": {
+      "ALLOW": {
+        "precision": 0.9908692789878925,
+        "recall": 1.0,
+        "f1": 0.9954137013873913
+      },
+      "WARN": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      "BLOCK": {
+        "precision": 0.9053574838375297,
+        "recall": 0.9989052207052486,
+        "f1": 0.9498335655605021
+      },
+      "macro_f1": 0.6484157556492978,
+      "confusion_matrix": [
+        [
+          34618,
+          0,
+          0
+        ],
+        [
+          31,
+          0,
+          27756
+        ],
+        [
+          288,
+          3,
+          265516
+        ]
+      ],
+      "roc_auc_ovr": 0.854047330638564
+    },
+    "tflite_metrics_cold_thresholded": {
+      "ALLOW": {
+        "precision": 0.4239752115711994,
+        "recall": 1.0,
+        "f1": 0.5954811686692068
+      },
+      "WARN": {
+        "precision": 0.23102359279212334,
+        "recall": 0.44754741425846617,
+        "f1": 0.3047404339782153
+      },
+      "BLOCK": {
+        "precision": 0.9499509679293938,
+        "recall": 0.6887892342940555,
+        "f1": 0.7985597704007084
+      },
+      "macro_f1": 0.5662604576827102
+    }
+  },
+  "class_weights": {
+    "allow": 8.0,
+    "warn": 3.5,
+    "block": 0.55
+  },
+  "notes": "Feedback cold MLP trained from full May 2026 feature corpus with six user-verified safe examples and jittered control BLOCK examples; no whitelist/rule override.\n\nv4 corrective fine-tune (2026-05-14): 2000 balanced cold-feedback rows (1200 BLOCK / 800 ALLOW, eval held out). Cold-start BLOCK recall 59.7%→77.7%, precision 77.5%→80.6%, 2-class acc 71.2%→79.5% on 300+300 eval. On 22 fresh BLOCK numbers absent from training: recall 40.9%→54.5% at 100% precision.",
+  "cold_thresholds": {
+    "block_threshold": 0.77,
+    "warn_threshold": 0.31,
+    "block_precision": 0.9501655783824186,
+    "block_recall": 0.688683894705557,
+    "block_f1": 0.7985647759370945,
+    "warn_f1": 0.3002994893951296,
+    "tuning_info": {
+      "mask_features": [
+        "inAllowlist",
+        "inBlacklist",
+        "reputationScore",
+        "sourceConfidence",
+        "reviewsLog",
+        "negativeRatio",
+        "searchVolumeLog",
+        "hasFraudCategory",
+        "hasTelemarketingCategory"
+      ],
+      "no_meta_set_to_1": true,
+      "min_cold_block_precision": 0.95,
+      "val_rows": 328214,
+      "user_verified_safe_feedback_rows": 6,
+      "control_block_feedback_rows": 13,
+      "feedback_jitter_augmented": true
+    }
+  },
+  "alpha": 0.3,
+  "base_card": "model_card.json",
+  "feedback_samples": 2000
+}
